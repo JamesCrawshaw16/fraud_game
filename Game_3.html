@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Truth or Trap — Swipe Game</title>
+  <style>
+    :root{ --bg:#0b0b0f; --fg:#f7f7fb; --muted:#9aa0aa; --accent:#7c5cff; --good:#22c55e; --bad:#ef4444; }
+    *{ box-sizing:border-box; }
+    html, body { height:100%; }
+    body{ margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif; overflow:hidden; }
+
+    .app{ position:relative; height:100dvh; width:100vw; display:flex; align-items:center; justify-content:center; }
+
+    .hud{ position:absolute; top:0; left:0; right:0; padding:16px; display:flex; align-items:center; justify-content:space-between; - z-index:5;+ z-index:1000;}
+    .badge{ background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); backdrop-filter:blur(8px); padding:8px 12px; border-radius:999px; font-weight:600; font-size:14px; }
+    .progress{ height:4px; width:100%; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; margin:0 12px; }
+    .progress > div{ height:100%; width:0%; background:linear-gradient(90deg,var(--accent),#00e5ff); }
+
+    .stage{ position:relative; width:min(94vw,440px); height:84vh; max-height:760px; }
+
+    .card{ position:absolute; inset:0; border-radius:24px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.45); background:#111; border:1px solid rgba(255,255,255,0.08); touch-action:pan-y; display:flex; align-items:center; justify-content:center; user-select:none; }
+    .card img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#0b0b0f; }
+    .card::before{ content:""; position:absolute; inset:0; background-image:var(--img, none); background-size:cover; background-position:center; filter:blur(24px) brightness(0.7); transform:scale(1.15); z-index:0; }
+    .card.no-bg::before{ display:none; }
+
+    .timer{ position:absolute; top:56px; left:50%; transform:translateX(-50%); - z-index:5;+ z-index:1000;; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); padding:8px 12px; border-radius:999px; font-weight:600; letter-spacing:0.2px; }
+    .timer .bar{ width:140px; height:6px; background:rgba(255,255,255,0.12); border-radius:6px; overflow:hidden; }
+    .timer .bar > div{ height:100%; width:100%; background:linear-gradient(90deg, var(--good), var(--accent)); transform-origin:left; }
+
+.actions{
+  position:fixed;          /* stays above the card */
+  left:0; right:0;
+  bottom: max(24px, env(safe-area-inset-bottom));  /* avoid notch/home bar */
+  display:flex; gap:16px; justify-content:center;
+  z-index:1000;            /* higher than cards */
+  pointer-events:auto;
+}
+
+.btn{
+  appearance:none;
+  border:none;
+  padding:16px 22px;
+  border-radius:20px;
+  font-weight:800; font-size:18px;
+  min-width:140px; cursor:pointer;
+  color:#fff; text-shadow:0 2px 4px rgba(0,0,0,.6);
+  background:rgba(0,0,0,.65);
+  border:2px solid transparent;
+  backdrop-filter:blur(8px);
+  box-shadow:0 8px 18px rgba(0,0,0,.5);
+  transition:transform .15s ease, background .3s ease, border .3s ease;
+}
+.btn.left{ border-color:rgba(239,68,68,.9); background:rgba(239,68,68,.28); }
+.btn.right{ border-color:rgba(34,197,94,.9); background:rgba(34,197,94,.28); }
+.btn:hover{ transform:scale(1.05); }
+
+
+    .stamp{ position:absolute; top:16px; right:16px; padding:10px 12px; border-radius:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; opacity:0; transform:scale(0.9); transition:opacity 160ms ease, transform 160ms ease; }
+    .stamp.show{ opacity:1; transform:scale(1) rotate(-2deg); }
+    .stamp.truth{ background:rgba(34,197,94,0.18); color:#86efac; border:1px solid rgba(34,197,94,0.4); }
+    .stamp.trap{ background:rgba(239,68,68,0.18); color:#fca5a5; border:1px solid rgba(239,68,68,0.4); }
+
+    .end{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:24px; }
+    .end h1{ margin:0; font-size:40px; }
+    .end p{ margin:0; color:var(--muted); }
+
+    .card{ transition: box-shadow 200ms ease; }
+    .card.correct{ box-shadow:0 20px 60px rgba(34,197,94,0.45); }
+    .card.wrong{ box-shadow:0 20px 60px rgba(239,68,68,0.45); }
+
+    img, .card { -webkit-touch-callout:none; -webkit-user-select:none; }
+
+    #fx{ position:absolute; inset:0; pointer-events:none; z-index:6; }
+
+    @keyframes shake { 0%{ transform:translate(0,0) } 20%{ transform:translate(-6px,2px) } 40%{ transform:translate(5px,-3px) } 60%{ transform:translate(-4px,2px) } 80%{ transform:translate(3px,0) } 100%{ transform:translate(0,0) } }
+    .shake{ animation:shake 220ms ease; }
+
+    @keyframes pulse { 0%{ transform:scale(1) } 50%{ transform:scale(1.04) } 100%{ transform:scale(1) } }
+    .btn{ animation:pulse 2.4s ease-in-out infinite; }
+
+    .pop{ animation:popScale 400ms ease; }
+    @keyframes popScale { 0%{ transform:scale(1);} 40%{ transform:scale(1.15);} 100%{ transform:scale(1);} }
+    .modal, .end {
+  margin-bottom:80px; /* ensures the bottom buttons remain visible */
+}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="hud">
+      <div class="badge" id="scoreBadge">Score: 0</div>
+      <div class="progress"><div id="progressInner"></div></div>
+      <div class="badge" id="countBadge">1 / 10</div>
+    </div>
+
+    <div class="timer" id="timer">
+      <span id="timeText">15</span>
+      <div class="bar"><div id="timeBar"></div></div>
+    </div>
+
+    <div class="stage" id="stage">
+      <!-- cards injected here -->
+    </div>
+
+    <canvas id="fx"></canvas>
+
+    <div class="actions">
+      <button class="btn left" id="btnLeft">⟵ Scam</button>
+      <button class="btn right" id="btnRight">Truth ⟶</button>
+    </div>
+  </div>
+
+  <template id="cardTpl">
+    <div class="card">
+      <img alt="scenario" />
+      <div class="stamp truth">TRUTH</div>
+      <div class="stamp trap">TRAP</div>
+    </div>
+  </template>
+
+  <script>
+    const ROUND_COUNT = 10;
+    const ROUND_SECONDS = 15;
+
+    const ITEMS = [
+      { url:"https://raw.githubusercontent.com/JamesCrawshaw16/tu-mobile-assets/main/Provisional.png", answer:"truth"},
+      { url:"https://i.redd.it/2bpr2pjr9ts81.jpg", answer:"trap"},
+      { url:"https://uk.norton.com/content/dam/blogs/images/norton/am/phishing-email-examples-02.jpg", answer:"trap"},
+      { url:"https://raw.githubusercontent.com/JamesCrawshaw16/tu-mobile-assets/main/JD%20Status.png", answer:"truth"},
+      { url:"https://media.kasperskydaily.com/wp-content/uploads/sites/86/2021/03/19114718/scam-with-playstation-5-giveaway-screenshot-1.png", answer:"trap"},
+      { url:"https://raw.githubusercontent.com/JamesCrawshaw16/tu-mobile-assets/main/Screenshot_20250820_110245_WhatsApp.jpg", answer:"truth"},
+      { url:"https://dicts.mak.ac.ug/sites/default/files/2025-03/screenshot_2025-03-11_at_08.52.25_0.png", answer:"trap"},
+      { url:"https://i.redd.it/khvp411xilif1.jpeg", answer:"truth"},
+      { url:"https://www.commbank.com.au/content/dam/commbank-assets/security/2025/money-mule-scam-example.jpg", answer:"trap"},
+      { url:"https://raw.githubusercontent.com/JamesCrawshaw16/tu-mobile-assets/main/Provisional.png", answer:"truth"},
+    ];
+
+    let index=0, score=0, timeLeft=ROUND_SECONDS, ticking=null, locked=false;
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+    const rounds = shuffle(ITEMS.slice(0,ROUND_COUNT));
+
+    const stage=document.getElementById('stage');
+    const tpl=document.getElementById('cardTpl');
+    const scoreBadge=document.getElementById('scoreBadge');
+    const countBadge=document.getElementById('countBadge');
+    const progressInner=document.getElementById('progressInner');
+    const timeText=document.getElementById('timeText');
+    const timeBar=document.getElementById('timeBar');
+    const fx=document.getElementById('fx');
+    const fxc=fx.getContext('2d');
+
+    function buildStack(){
+      stage.innerHTML=''; resizeCanvas();
+      for(let i=0;i<rounds.length;i++){
+        const data=rounds[i];
+        const node=tpl.content.firstElementChild.cloneNode(true);
+        const img=node.querySelector('img');
+        img.src = data.url;
+        node.dataset.answer = data.answer;
+        img.alt = 'scenario';
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        img.decoding = 'async';
+        img.draggable = false;
+        img.addEventListener('load', () => { node.style.setProperty('--img', `url("${data.url}")`); });
+        img.addEventListener('error', () => { node.style.setProperty('--img', 'none'); img.style.display='none'; node.classList.add('no-bg'); node.style.background='#111'; });
+        node.style.zIndex=10+i;
+        node.style.transform=`translateY(${(rounds.length-i-1)*6}px) scale(${1-(rounds.length-i-1)*0.02})`;
+        wireSwipe(node,i);
+        stage.appendChild(node);
+      }
+      updateHud(); startTimer();
+    }
+
+    function updateHud(){
+      scoreBadge.textContent=`Score: ${score}`;
+      countBadge.textContent=`${Math.min(index+1,ROUND_COUNT)} / ${ROUND_COUNT}`;
+      progressInner.style.width=`${(index/ROUND_COUNT)*100}%`;
+    }
+
+    function startTimer(){
+      clearInterval(ticking); timeLeft=ROUND_SECONDS; renderTimer();
+      ticking=setInterval(()=>{ timeLeft--; renderTimer(); if(timeLeft<=3&&timeLeft>0) sfx('tick'); if(timeLeft<=0){ clearInterval(ticking); autoFail(); } },1000);
+      const start=performance.now();
+      function raf(ts){ const elapsed=(ts-start)/1000; const pct=Math.max(0,1-(elapsed/ROUND_SECONDS)); timeBar.style.transform=`scaleX(${pct})`; if(elapsed<ROUND_SECONDS&&!locked) requestAnimationFrame(raf); }
+      requestAnimationFrame(raf);
+    }
+    function renderTimer(){ timeText.textContent=Math.max(0,timeLeft).toString(); }
+
+    function autoFail(){ if(locked) return; sfx('timeout'); vibrate([0,120,40,120]); snapDecision('timeout'); }
+
+    function wireSwipe(card,i){
+      let startX=0,dx=0,dy=0,dragging=false; const truthStamp=card.querySelector('.stamp.truth'); const trapStamp=card.querySelector('.stamp.trap');
+      function onStart(e){ if(locked||i!==index) return; dragging=true; card.style.transition='none'; const t=e.touches?e.touches[0]:e; startX=t.clientX; initAudio(); }
+      function onMove(e){ if(!dragging||i!==index) return; const t=e.touches?e.touches[0]:e; dx=t.clientX-startX; dy=t.clientY; const rot=Math.max(-15,Math.min(15,dx/10)); card.style.transform=`translate(${dx}px,${dy}px) rotate(${rot}deg)`; const pct=Math.min(1,Math.abs(dx)/120); if(dx>0){ truthStamp.classList.toggle('show',pct>0.2); trapStamp.classList.remove('show'); } else if(dx<0){ trapStamp.classList.toggle('show',pct>0.2); truthStamp.classList.remove('show'); }}
+      function onEnd(){ if(!dragging||i!==index) return; dragging=false; truthStamp.classList.remove('show'); trapStamp.classList.remove('show'); if(Math.abs(dx)>110){ fling(dx>0?'truth':'trap'); } else { card.style.transition='transform 160ms ease'; card.style.transform=''; } dx=0; }
+      function fling(dir){ if(locked) return; locked=true; clearInterval(ticking); const offX=dir==='truth'?window.innerWidth:-window.innerWidth; card.style.transition='transform 260ms ease'; card.style.transform=`translate(${offX}px,${dy}px) rotate(${dir==='truth'?18:-18}deg)`; sfx('swipe'); vibrate([0,30]); setTimeout(()=>snapDecision(dir),180); }
+      card.addEventListener('mousedown',onStart); card.addEventListener('mousemove',onMove); card.addEventListener('mouseup',onEnd); card.addEventListener('mouseleave',onEnd); card.addEventListener('touchstart',onStart,{passive:true}); card.addEventListener('touchmove',onMove,{passive:true}); card.addEventListener('touchend',onEnd);
+    }
+
+    function snapDecision(choice){
+      const current=stage.querySelectorAll('.card')[stage.querySelectorAll('.card').length-1]; if(!current) return endGame();
+      const correctAnswer = current.dataset.answer;
+const correct = (choice === correctAnswer);
+      if(choice==='timeout'){ flashWrong(current,true); sfx('timeout'); vibrate([0,140,60,140]); } else if(correct){ flashRight(current); sfx('correct'); vibrate([0,60,40,40]); score++; } else { flashWrong(current); sfx('wrong'); vibrate([0,120]); }
+      scoreBadge.textContent=`Score: ${score}`;
+      setTimeout(()=>{ current.remove(); index++; updateHud(); locked=false; if(index>=ROUND_COUNT) endGame(); else startTimer(); },260);
+    }
+
+    function flashRight(el){ el.classList.add('correct','pop'); const r=el.getBoundingClientRect(); burstParticles(r.left+r.width*0.8,r.top+r.height*0.2,'#22c55e'); }
+    function flashWrong(el){ el.classList.add('wrong','pop'); document.body.classList.add('shake'); setTimeout(()=>document.body.classList.remove('shake'),220); const r=el.getBoundingClientRect(); burstParticles(r.left+r.width*0.2,r.top+r.height*0.2,'#ef4444'); }
+
+    function endGame(){
+      document.querySelector('.actions').style.display='none'; document.getElementById('timer').style.display='none';
+      const end=document.createElement('div'); end.className='end'; const pct=Math.round((score/ROUND_COUNT)*100);
+      end.innerHTML=`<h1>Final Score: ${score} / ${ROUND_COUNT}</h1>
+        <p>${pct>=80?'🟢 Scam Spotter Supreme!':pct>=50?'🟡 Getting there — keep practicing.':'🔴 Traps got you this time — try again!'}</p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+          <button class="btn" onclick="location.reload()">Play Again</button>
+          <button class="btn" onclick="shareScore()">Share</button>
+        </div>`;
+      stage.innerHTML=''; stage.appendChild(end);
+      setTimeout(()=>{ const r=stage.getBoundingClientRect(); for(let i=0;i<4;i++) burstParticles(r.left+r.width*(0.2+0.2*i), r.top+r.height*0.3,'#7c5cff'); sfx('fanfare'); vibrate([0,80,40,80,40,120]); },60);
+    }
+
+    function shareScore(){ const text=`I scored ${score}/${ROUND_COUNT} on Truth or Trap!`; if(navigator.share){ navigator.share({ text }); } else { navigator.clipboard.writeText(text); alert('Score copied to clipboard!'); } }
+
+    // Tap to zoom (single global listener)
+    document.addEventListener('click',(e)=>{
+      const img = e.target.closest('.card img');
+      if(!img) return;
+      const src=img.src;
+      const overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;';
+      const full=document.createElement('img'); full.src=src; full.style.cssText='max-width:90%;max-height:90%;object-fit:contain;border-radius:12px;';
+      overlay.appendChild(full);
+      overlay.addEventListener('click',()=>overlay.remove());
+      document.body.appendChild(overlay);
+    });
+
+    // === FX: Audio + Haptics + Particles ===
+    let AC=null, audioReady=false, noiseBuffer=null;
+    function initAudio(){ if(audioReady) return; audioReady=true; try{ AC=new (window.AudioContext||window.webkitAudioContext)(); AC.resume(); const len=AC.sampleRate*0.3; noiseBuffer=AC.createBuffer(1,len,AC.sampleRate); const d=noiseBuffer.getChannelData(0); for(let i=0;i<len;i++){ d[i]=(Math.random()*2-1)*(1-i/len); } }catch(e){} }
+    function env(node,time=0.2){ if(!AC) return; const now=AC.currentTime; const g=AC.createGain(); g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.9,now+0.01); g.gain.exponentialRampToValueAtTime(0.001,now+time); node.connect(g).connect(AC.destination); }
+    function beep(freq=800,dur=0.15){ if(!AC) return; const o=AC.createOscillator(); o.type='sine'; o.frequency.value=freq; env(o,dur); o.start(); o.stop(AC.currentTime+dur); }
+    function chirp(start=500,end=1200,dur=0.25){ if(!AC) return; const o=AC.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(start,AC.currentTime); o.frequency.exponentialRampToValueAtTime(end,AC.currentTime+dur); env(o,dur); o.start(); o.stop(AC.currentTime+dur); }
+    function buzz(freq=120,dur=0.25){ if(!AC) return; const o=AC.createOscillator(); o.type='square'; o.frequency.value=freq; env(o,dur); o.start(); o.stop(AC.currentTime+dur); }
+    function whoosh(){ if(!AC||!noiseBuffer) return; const s=AC.createBufferSource(); s.buffer=noiseBuffer; const g=AC.createGain(); g.gain.value=0.5; s.connect(g).connect(AC.destination); s.playbackRate.value=1.4; s.start(); }
+    function sfx(kind){ if(!AC) return; switch(kind){ case 'swipe': whoosh(); break; case 'tick': beep(900,0.07); break; case 'correct': chirp(600,1600,0.22); setTimeout(()=>beep(1400,0.08),120); break; case 'wrong': buzz(140,0.26); break; case 'timeout': buzz(160,0.3); setTimeout(()=>buzz(120,0.25),120); break; case 'fanfare': chirp(700,2000,0.28); setTimeout(()=>chirp(900,2200,0.28),160); break; } }
+    function vibrate(pattern){ if('vibrate' in navigator) navigator.vibrate(pattern); }
+
+    let particles=[]; let rafFx=null;
+    function resizeCanvas(){ fx.width=window.innerWidth; fx.height=window.innerHeight; }
+    window.addEventListener('resize',resizeCanvas);
+    function burstParticles(x,y,color){ const count=18; for(let i=0;i<count;i++){ const a=Math.random()*Math.PI*2; const spd=2+Math.random()*4; particles.push({ x, y, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-2, life:1, color }); } loopFX(); }
+    function loopFX(){ if(rafFx) return; const g=9.8/60; rafFx=requestAnimationFrame(function draw(){ rafFx=null; fxc.clearRect(0,0,fx.width,fx.height); particles=particles.filter(p=>p.life>0); for(const p of particles){ p.x+=p.vx; p.y+=p.vy; p.vy+=g*0.4; p.life-=0.02; fxc.globalAlpha=Math.max(0,p.life); fxc.beginPath(); fxc.arc(p.x,p.y,3,0,Math.PI*2); fxc.fillStyle=p.color; fxc.fill(); } if(particles.length){ rafFx=requestAnimationFrame(draw); } }); }
+
+    document.getElementById('btnLeft').addEventListener('click',()=>{ if(!locked){ locked=true; clearInterval(ticking); snapDecision('trap'); }});
+    document.getElementById('btnRight').addEventListener('click',()=>{ if(!locked){ locked=true; clearInterval(ticking); snapDecision('truth'); }});
+    window.addEventListener('keydown', (e)=>{ if(locked) return; if(e.key==='ArrowLeft'){ locked=true; clearInterval(ticking); snapDecision('trap'); } if(e.key==='ArrowRight'){ locked=true; clearInterval(ticking); snapDecision('truth'); } });
+
+    buildStack();
+  </script>
+</body>
+</html>
